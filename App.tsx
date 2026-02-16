@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Camera, LayoutDashboard, Settings, Plus, Leaf, Target, Truck, Calendar, Trophy, ArrowUpCircle, History, ChevronRight, Download, FileSpreadsheet, Cloud, Link as LinkIcon, CheckCircle2 } from 'lucide-react';
+import { Camera, LayoutDashboard, Settings, Plus, Leaf, Target, Truck, Calendar, Trophy, ArrowUpCircle, History, ChevronRight, Download, FileSpreadsheet, Cloud, Link as LinkIcon, CheckCircle2, RefreshCw } from 'lucide-react';
 import { CaneTicket, QuotaSettings, AppView, GoalHistory } from './types';
 import { Scanner } from './components/Scanner';
 import { RecordList } from './components/RecordList';
 import { SummaryCard } from './components/SummaryCard';
-import { syncToGoogleSheets } from './services/googleSheetsService';
+import { syncToGoogleSheets, fetchFromGoogleSheets } from './services/googleSheetsService';
 
 // Color Palette
 const COLORS_PROGRESS = ['#10B981', '#E5E7EB']; // Green, Gray
@@ -28,20 +28,19 @@ const App: React.FC = () => {
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showNextGoalModal, setShowNextGoalModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Load data on mount
   useEffect(() => {
     const savedRecords = localStorage.getItem('caneRecords');
     const savedQuota = localStorage.getItem('caneQuota');
     
-    if (savedRecords) {
-      setRecords(JSON.parse(savedRecords));
-    }
-    
+    let currentScriptUrl = DEFAULT_SCRIPT_URL;
+
     if (savedQuota) {
       const parsedQuota = JSON.parse(savedQuota);
       // Migration: If url is missing or empty, use the default provided by user
-      const scriptUrl = (parsedQuota.googleScriptUrl && parsedQuota.googleScriptUrl.trim() !== "") 
+      currentScriptUrl = (parsedQuota.googleScriptUrl && parsedQuota.googleScriptUrl.trim() !== "") 
         ? parsedQuota.googleScriptUrl 
         : DEFAULT_SCRIPT_URL;
 
@@ -49,11 +48,20 @@ const App: React.FC = () => {
         targetTons: parsedQuota.targetTons || 1000,
         currentGoalStartDate: parsedQuota.currentGoalStartDate || 0,
         history: parsedQuota.history || [],
-        googleScriptUrl: scriptUrl
+        googleScriptUrl: currentScriptUrl
       });
     } else {
       // New user setup
       setQuota(prev => ({ ...prev, googleScriptUrl: DEFAULT_SCRIPT_URL }));
+    }
+
+    if (savedRecords) {
+      setRecords(JSON.parse(savedRecords));
+    }
+
+    // Auto-fetch latest data from Google Sheets on startup
+    if (currentScriptUrl) {
+      handleFetchData(currentScriptUrl);
     }
   }, []);
 
@@ -96,6 +104,29 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
+  const handleFetchData = async (url: string) => {
+    setIsLoading(true);
+    try {
+      const cloudRecords = await fetchFromGoogleSheets(url);
+      
+      if (cloudRecords === null) {
+          // Error case
+          alert("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้\n\nสาเหตุที่เป็นไปได้:\n1. ยังไม่ได้ตั้งค่าสิทธิ์ Apps Script เป็น 'Anyone' (ทุกคน)\n2. ลิงก์ Web App URL ไม่ถูกต้อง\n3. ปัญหาการเชื่อมต่ออินเทอร์เน็ต");
+      } else if (cloudRecords.length > 0) {
+        // Success case with data
+        setRecords(cloudRecords);
+        console.log(`Loaded ${cloudRecords.length} records from cloud`);
+      } else {
+        // Success case but empty
+        console.log("Connect success, but no records found.");
+      }
+    } catch (e) {
+      console.error("Failed to fetch data", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSaveRecord = async (newTicket: CaneTicket) => {
     // 1. Save locally first (Instant UI update)
     setRecords(prev => [...prev, newTicket]);
@@ -112,6 +143,7 @@ const App: React.FC = () => {
           const success = await syncToGoogleSheets(scriptUrl, newTicket);
           if (success) {
             console.log("Synced to Google Sheets successfully");
+            // Optional: Re-fetch to confirm consistency if needed, but might be slow
           } else {
             console.warn("Sync completed with potential issues");
           }
@@ -127,6 +159,8 @@ const App: React.FC = () => {
 
   const handleDeleteRecord = (id: string) => {
     setRecords(prev => prev.filter(r => r.id !== id));
+    // Note: This only deletes locally. Deleting from Google Sheets requires more complex API logic.
+    alert("ลบข้อมูลออกจากเครื่องแล้ว (ข้อมูลใน Google Sheets จะยังคงอยู่)");
   };
 
   const updateCurrentQuota = (newTarget: number, newScriptUrl: string) => {
@@ -136,6 +170,11 @@ const App: React.FC = () => {
       googleScriptUrl: newScriptUrl
     }));
     setShowQuotaModal(false);
+    
+    // If URL changed, try to fetch data
+    if (newScriptUrl && newScriptUrl !== quota.googleScriptUrl) {
+      handleFetchData(newScriptUrl);
+    }
   };
 
   const handleStartNextGoal = (newTarget: number) => {
@@ -226,14 +265,26 @@ const App: React.FC = () => {
               <span>CaneTrack AI</span>
               {isSyncing && <span className="text-xs text-blue-500 animate-pulse font-normal">(กำลังส่ง...)</span>}
             </h1>
-            <p className="text-sm text-gray-500">รวมทั้งหมด: {lifetimeWeightTons.toLocaleString()} ตัน</p>
+            <p className="text-sm text-gray-500">
+              รวมทั้งหมด: {lifetimeWeightTons.toLocaleString()} ตัน
+              {isLoading && <span className="ml-2 inline-block animate-spin text-green-600">⌛</span>}
+            </p>
           </div>
-          <button 
-            onClick={() => setShowQuotaModal(true)}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
-          >
-            <Settings size={24} />
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => handleFetchData(quota.googleScriptUrl || DEFAULT_SCRIPT_URL)}
+              className={`p-2 rounded-full ${isLoading ? 'animate-spin bg-green-50 text-green-600' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+              title="รีเฟรชข้อมูลจาก Cloud"
+            >
+              <RefreshCw size={20} />
+            </button>
+            <button 
+              onClick={() => setShowQuotaModal(true)}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+            >
+              <Settings size={24} />
+            </button>
+          </div>
         </div>
 
         {/* Dashboard Card */}
@@ -352,7 +403,9 @@ const App: React.FC = () => {
         <div>
           <div className="flex justify-between items-end mb-4">
             <h2 className="text-lg font-bold text-gray-800">รายการล่าสุด</h2>
-            <span className="text-xs text-gray-500">รวมทั้งหมด {records.length} รายการ</span>
+            <div className="flex items-center gap-2">
+               <span className="text-xs text-gray-500">รวมทั้งหมด {records.length} รายการ</span>
+            </div>
           </div>
           <RecordList records={records} onDelete={handleDeleteRecord} />
         </div>

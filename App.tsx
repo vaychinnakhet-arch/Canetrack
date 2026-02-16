@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Camera, Settings, Plus, Leaf, Target, Truck, Trophy, ArrowUpCircle, History, Download, FileSpreadsheet, Cloud, CheckCircle2, RefreshCw, Coins } from 'lucide-react';
+import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins } from 'lucide-react';
 import { CaneTicket, QuotaSettings, AppView, GoalHistory } from './types';
 import { Scanner } from './components/Scanner';
 import { RecordList } from './components/RecordList';
@@ -346,8 +346,8 @@ const App: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Leaf className="text-green-600 fill-green-600" />
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+              <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
               <span>CaneTrack AI</span>
               {isSyncing && <span className="text-xs text-blue-500 animate-pulse font-normal">(Syncing...)</span>}
             </h1>

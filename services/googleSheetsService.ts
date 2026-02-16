@@ -41,17 +41,16 @@ const formatSheetTime = (timeVal: any): string => {
   return str;
 };
 
-export const syncToGoogleSheets = async (ticket: CaneTicket): Promise<boolean> => {
+export const syncToGoogleSheets = async (ticket: CaneTicket, isUpdate: boolean = false): Promise<boolean> => {
   if (!FIXED_SCRIPT_URL || FIXED_SCRIPT_URL.includes("PASTE_YOUR_SCRIPT_URL_HERE")) {
     console.warn("Invalid Script URL");
     return false;
   }
 
-  // ✅ เตรียมข้อมูลรูปภาพ (ไม่มีการย่อขนาดตามคำขอ)
+  // ✅ เตรียมข้อมูลรูปภาพ
   let finalImageBase64 = "";
   if (ticket.imageUrl && ticket.imageUrl.startsWith("data:image")) {
       try {
-          // ส่งไฟล์ Original เลย (ตัดแค่ header)
           finalImageBase64 = ticket.imageUrl.replace(/^data:image\/(png|jpg|jpeg|webp);base64,/, "");
       } catch (e) {
           console.error("Image processing failed:", e);
@@ -59,6 +58,7 @@ export const syncToGoogleSheets = async (ticket: CaneTicket): Promise<boolean> =
   }
 
   const payload = {
+    action: isUpdate ? 'update' : 'create', // Support update action
     id: ticket.id,
     ticketNumber: ticket.ticketNumber,
     date: ticket.date,
@@ -71,6 +71,9 @@ export const syncToGoogleSheets = async (ticket: CaneTicket): Promise<boolean> =
     productName: ticket.productName,
     goalTarget: ticket.goalTarget || 0,
     goalRound: ticket.goalRound || 1,
+    moisture: ticket.moisture || 0,
+    canePrice: ticket.canePrice || 0,
+    totalValue: ticket.totalValue || 0,
     imageBase64: finalImageBase64 
   };
 
@@ -94,7 +97,7 @@ export const deleteFromGoogleSheets = async (ticketNumber: string): Promise<bool
 
   const payload = {
     action: 'delete',
-    ticketNumber: ticketNumber.trim() // ✅ เพิ่ม trim() เพื่อตัดช่องว่างป้องกันหาไม่เจอ
+    ticketNumber: ticketNumber.trim()
   };
 
   try {
@@ -146,6 +149,10 @@ export const fetchFromGoogleSheets = async (): Promise<CaneTicket[] | null> => {
       productName: item.productName || "อ้อย",
       goalTarget: Number(item.goalTarget) || 0,
       goalRound: Number(item.goalRound) || 1,
+      // Map new fields
+      moisture: item.moisture ? Number(item.moisture) : undefined,
+      canePrice: item.canePrice ? Number(item.canePrice) : undefined,
+      totalValue: item.totalValue ? Number(item.totalValue) : undefined,
       imageUrl: item.imageUrl && item.imageUrl.startsWith("http") ? item.imageUrl : undefined,
       timestamp: item.timestamp ? new Date(item.timestamp).getTime() : Date.now()
     }));

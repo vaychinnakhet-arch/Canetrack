@@ -1,3 +1,4 @@
+
 export interface CaneTicket {
   id: string;
   ticketNumber: string;
@@ -14,6 +15,10 @@ export interface CaneTicket {
   // New fields for tracking quota history per ticket
   goalTarget?: number;
   goalRound?: number;
+  // New fields for price calculation
+  moisture?: number;
+  canePrice?: number;
+  totalValue?: number;
 }
 
 export interface GoalHistory {

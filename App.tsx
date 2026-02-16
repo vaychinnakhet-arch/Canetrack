@@ -348,7 +348,7 @@ const App: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
               <img 
-                src="https://i.postimg.cc/PxqcX9mk/logo.png" 
+                src="https://img2.pic.in.th/logof7d1e27d5adf7619.png" 
                 alt="Logo" 
                 className="h-12 w-auto object-contain drop-shadow-sm" 
               />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CaneTicket } from '../types';
-import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Target, Calendar, Edit, X, Droplets, Coins } from 'lucide-react';
+import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, Coins, PlusCircle, Calculator } from 'lucide-react';
 
 interface RecordListProps {
   records: CaneTicket[];
@@ -123,6 +123,8 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
   const [showDetails, setShowDetails] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
 
+  const hasMoisture = record.moisture !== undefined && record.moisture > 0;
+
   return (
     <>
     <div className={`transition-colors hover:bg-white ${!isLast ? 'border-b border-gray-100' : ''}`}>
@@ -145,11 +147,13 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
         </div>
         <div className="text-right">
              <div className="text-xs text-gray-400 flex flex-col items-end">
-                {record.moisture ? (
+                {hasMoisture ? (
                    <span className="flex items-center gap-1 text-blue-600 font-medium mb-1">
                       <Droplets size={10} /> {record.moisture}%
                    </span>
-                ) : null}
+                ) : (
+                    <span className="text-gray-300 text-[10px] mb-1">รอค่าความชื้น</span>
+                )}
                 {showDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
              </div>
         </div>
@@ -159,59 +163,70 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
         <div className="bg-white p-4 pl-12 text-sm animate-fade-in pb-6 cursor-default">
           <div className="grid grid-cols-2 gap-y-3 gap-x-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
             
-            <div className="col-span-2 flex justify-between items-start">
+            <div className="col-span-2 flex justify-between items-start border-b border-gray-200 pb-2 mb-1">
                  <div className="flex items-start space-x-2 text-gray-600">
                     <FileText size={14} className="mt-0.5" />
                     <span className="font-medium">ใบชั่ง: {record.ticketNumber}</span>
                  </div>
+                 
+                 {/* ปุ่มแก้ไขเล็กๆ สำหรับแก้คำผิด */}
                  <button 
                    onClick={(e) => { e.stopPropagation(); onEdit(record); }}
-                   className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100"
+                   className="text-gray-400 hover:text-gray-600 flex items-center gap-1 text-[10px] bg-white px-2 py-1 rounded border border-gray-200"
                  >
-                   <Edit size={12} /> แก้ไข
+                   <Edit size={10} /> แก้ไขรายละเอียด
                  </button>
             </div>
 
-            {/* Price & Moisture Display */}
-            <div className="col-span-2 grid grid-cols-2 gap-2 bg-white p-2 rounded border border-gray-200">
-                 <div>
-                    <span className="text-xs text-gray-400 block mb-1">ความชื้น</span>
-                    <span className={`font-bold text-lg ${record.moisture ? 'text-blue-600' : 'text-gray-300'}`}>
-                        {record.moisture ? `${record.moisture}%` : '-'}
-                    </span>
-                 </div>
-                 <div className="text-right">
-                    <span className="text-xs text-gray-400 block mb-1">ราคา/ตัน</span>
-                    <span className="font-medium text-gray-700">
-                        {record.canePrice ? `${record.canePrice.toLocaleString()} บ.` : '-'}
-                    </span>
-                 </div>
-                 {record.totalValue && (
-                     <div className="col-span-2 border-t border-gray-100 pt-2 mt-1 flex justify-between items-center">
-                        <span className="text-xs text-amber-600 font-bold flex items-center gap-1"><Coins size={12}/> มูลค่ารวม</span>
-                        <span className="text-lg font-bold text-amber-600">{record.totalValue.toLocaleString()} บาท</span>
-                     </div>
-                 )}
+            {/* ส่วนจัดการความชื้นและราคา - ไฮไลท์สำคัญ */}
+            <div className="col-span-2">
+                {!hasMoisture ? (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onEdit(record); }}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+                    >
+                        <PlusCircle size={20} />
+                        <span className="font-bold text-lg">ระบุความชื้น / คำนวณเงิน</span>
+                    </button>
+                ) : (
+                    <div 
+                        onClick={(e) => { e.stopPropagation(); onEdit(record); }}
+                        className="bg-blue-50 border border-blue-100 rounded-lg p-3 cursor-pointer hover:bg-blue-100 transition-colors group"
+                    >
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-blue-800 flex items-center gap-1"><Calculator size={12}/> สรุปยอดเงิน</span>
+                            <span className="text-[10px] text-blue-400 group-hover:text-blue-600 flex items-center gap-1">แตะเพื่อแก้ไข <Edit size={8}/></span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <span className="text-xs text-gray-500 block">ความชื้น</span>
+                                <span className="font-bold text-xl text-blue-700">{record.moisture}%</span>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-xs text-gray-500 block">มูลค่ารวม</span>
+                                <span className="font-bold text-xl text-amber-600">{record.totalValue?.toLocaleString()} บ.</span>
+                            </div>
+                        </div>
+                        <div className="mt-2 text-xs text-center text-gray-400 border-t border-blue-100 pt-1">
+                            ราคาตันละ {record.canePrice?.toLocaleString()} บาท
+                        </div>
+                    </div>
+                )}
             </div>
 
+            <div className="bg-white p-2 rounded border border-gray-100">
+              <span className="text-xs text-gray-400 block">น้ำหนักสุทธิ</span>
+              <span className="font-medium text-gray-800">{record.netWeightKg.toLocaleString()} กก.</span>
+            </div>
+            
             <div className="bg-white p-2 rounded border border-gray-100">
               <span className="text-xs text-gray-400 block">น้ำหนักรวม</span>
               <span className="font-medium">{record.grossWeightKg?.toLocaleString() || '-'}</span>
             </div>
             
-            <div className="bg-white p-2 rounded border border-gray-100">
-              <span className="text-xs text-gray-400 block">น้ำหนักรถ</span>
-              <span className="font-medium">{record.tareWeightKg?.toLocaleString() || '-'}</span>
-            </div>
-            
             <div className="col-span-2">
               <span className="text-xs text-gray-400 block">ลูกค้า/ชาวไร่</span>
               <span className="font-medium text-gray-700">{record.vendorName}</span>
-            </div>
-
-            <div className="col-span-2">
-               <span className="text-xs text-gray-400 block">สินค้า</span>
-               <span className="font-medium text-gray-700">{record.productName}</span>
             </div>
 
             {record.imageUrl && (
@@ -234,9 +249,9 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
                     e.preventDefault();
                     onDelete(record.id);
                 }}
-                className="w-full bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-100 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all font-bold active:scale-95"
+                className="w-full text-red-400 hover:text-red-600 hover:bg-red-50 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-xs"
                 >
-                    <Trash2 size={18} />
+                    <Trash2 size={14} />
                     <span>ลบรายการนี้</span>
                 </button>
             </div>

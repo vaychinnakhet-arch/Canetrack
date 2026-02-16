@@ -61,7 +61,7 @@ const App: React.FC = () => {
 
     // Auto-fetch latest data from Google Sheets on startup
     if (currentScriptUrl) {
-      handleFetchData(currentScriptUrl);
+      handleFetchData(currentScriptUrl, true); // true = silent mode (no alert on error)
     }
   }, []);
 
@@ -104,21 +104,25 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
-  const handleFetchData = async (url: string) => {
+  const handleFetchData = async (url: string, silent: boolean = false) => {
     setIsLoading(true);
     try {
       const cloudRecords = await fetchFromGoogleSheets(url);
       
       if (cloudRecords === null) {
           // Error case
-          alert("ไม่สามารถดึงข้อมูลจาก Google Sheets ได้\n\nสาเหตุที่เป็นไปได้:\n1. ยังไม่ได้ตั้งค่าสิทธิ์ Apps Script เป็น 'Anyone' (ทุกคน)\n2. ลิงก์ Web App URL ไม่ถูกต้อง\n3. ปัญหาการเชื่อมต่ออินเทอร์เน็ต");
+          if (!silent) {
+            alert("⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้\n\nสาเหตุที่เป็นไปได้:\n1. ยังไม่ได้ตั้งสิทธิ์ 'Anyone' (ทุกคน) ตอน Deploy\n2. Script Error: หากสร้าง Script แบบ Standalone (ไม่ได้สร้างผ่าน Google Sheet) คำสั่ง getActiveSpreadsheet() จะใช้ไม่ได้\n3. URL ไม่ถูกต้อง");
+          }
       } else if (cloudRecords.length > 0) {
         // Success case with data
         setRecords(cloudRecords);
         console.log(`Loaded ${cloudRecords.length} records from cloud`);
+        if (!silent) alert(`ดึงข้อมูลสำเร็จ ${cloudRecords.length} รายการ`);
       } else {
         // Success case but empty
         console.log("Connect success, but no records found.");
+        if (!silent) alert("เชื่อมต่อสำเร็จ แต่ยังไม่มีข้อมูลในตาราง");
       }
     } catch (e) {
       console.error("Failed to fetch data", e);

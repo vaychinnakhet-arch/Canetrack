@@ -21,13 +21,13 @@ export const syncToGoogleSheets = async (scriptUrl: string, ticket: CaneTicket):
   };
 
   try {
-    // Note: We use 'no-cors' implicitly via simple request or just fire-and-forget logic 
-    // because GAS often returns opaque responses for POST.
-    // We assume if fetch doesn't throw, it worked.
+    // Use 'no-cors' to ensure the request is sent even if the browser blocks the redirect response.
+    // Content-Type must be text/plain to satisfy 'no-cors' constraints or simple request checks.
     await fetch(scriptUrl, {
       method: 'POST',
+      mode: 'no-cors',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8', 
+        'Content-Type': 'text/plain', 
       },
       body: JSON.stringify(payload),
     });
@@ -43,16 +43,14 @@ export const fetchFromGoogleSheets = async (scriptUrl: string): Promise<CaneTick
   if (!scriptUrl) return null;
 
   try {
-    // Append timestamp to avoid browser caching
+    // Append timestamp to prevent caching
     const separator = scriptUrl.includes('?') ? '&' : '?';
     const url = `${scriptUrl}${separator}t=${Date.now()}`;
 
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Accept': 'application/json'
-        }
-    });
+    // Simplified GET request. 
+    // We removed 'credentials: omit' and explicit redirect options to rely on standard browser defaults,
+    // which is often the most compatible way to handle GAS Web App redirects for public scripts.
+    const response = await fetch(url);
 
     if (!response.ok) {
         throw new Error(`HTTP Error: ${response.status}`);
@@ -65,9 +63,9 @@ export const fetchFromGoogleSheets = async (scriptUrl: string): Promise<CaneTick
         return [];
     }
 
-    // Map the raw data from Google Sheets back to CaneTicket objects
+    // Map data
     return data.map((item: any, index: number) => ({
-      id: `sheet-${index}-${item.timestamp}`, // Create a unique ID
+      id: `sheet-${index}-${item.timestamp}`,
       ticketNumber: item.ticketNumber,
       date: item.date,
       time: item.time,
@@ -82,6 +80,6 @@ export const fetchFromGoogleSheets = async (scriptUrl: string): Promise<CaneTick
     }));
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);
-    return null; // Return null to indicate error
+    return null;
   }
 };

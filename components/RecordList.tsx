@@ -235,6 +235,7 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
                  <img 
                    src={record.imageUrl} 
                    alt="Original Slip" 
+                   referrerPolicy="no-referrer"
                    onClick={() => setShowImageModal(true)}
                    className="rounded-lg max-h-48 object-contain bg-white border border-gray-200 w-full cursor-zoom-in hover:opacity-95 transition-opacity" 
                  />
@@ -270,7 +271,7 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
                 >
                     <X size={24} />
                 </button>
-                <img src={record.imageUrl} className="max-w-full max-h-[90vh] object-contain rounded" />
+                <img src={record.imageUrl} referrerPolicy="no-referrer" className="max-w-full max-h-[90vh] object-contain rounded" />
             </div>
         </div>
     )}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CaneTicket } from '../types';
-import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, Coins, PlusCircle, Calculator, ImageOff } from 'lucide-react';
+import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, Coins, PlusCircle, Calculator, ImageOff, ExternalLink } from 'lucide-react';
 
 interface RecordListProps {
   records: CaneTicket[];
@@ -244,10 +244,19 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
                         className="rounded-lg max-h-48 object-contain bg-white border border-gray-200 w-full cursor-zoom-in hover:opacity-95 transition-opacity" 
                     />
                  ) : (
-                    <div className="w-full h-24 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-gray-400 border border-gray-200 border-dashed">
-                        <ImageOff size={24} className="mb-1" />
-                        <span className="text-[10px]">ไม่สามารถโหลดรูปภาพได้</span>
-                        <span className="text-[10px] text-gray-300">(ตรวจสอบสิทธิ์ไฟล์ Google Drive)</span>
+                    <div className="w-full h-auto py-4 bg-gray-50 rounded-lg flex flex-col items-center justify-center text-gray-400 border border-gray-200 border-dashed">
+                        <ImageOff size={24} className="mb-2 text-gray-300" />
+                        <span className="text-xs mb-2">ไม่สามารถแสดงตัวอย่างภาพได้</span>
+                        <a 
+                            href={record.imageUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs bg-white border border-gray-300 px-3 py-1.5 rounded-full text-blue-600 hover:bg-blue-50 transition-colors shadow-sm"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <ExternalLink size={12} />
+                            คลิกเพื่อเปิดรูปต้นฉบับ
+                        </a>
                     </div>
                  )}
               </div>

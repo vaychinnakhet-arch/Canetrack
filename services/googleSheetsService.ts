@@ -41,33 +41,35 @@ const formatSheetTime = (timeVal: any): string => {
   return str;
 };
 
-// ฟังก์ชันแปลง URL Google Drive ให้เป็น Direct Link
+// ฟังก์ชันแปลง URL Google Drive ให้เป็น Direct Link (แบบ Thumbnail)
 const normalizeImageUrl = (urlOrBase64: any): string | undefined => {
     if (!urlOrBase64) return undefined;
     const str = String(urlOrBase64).trim();
     
     if (str.length < 5) return undefined;
 
-    // กรณีเป็น URL
-    if (str.startsWith("http")) {
-        // ถ้าเป็น Google Drive Link แบบ View ให้แปลงเป็น Export
-        if (str.includes("drive.google.com") && !str.includes("export=view")) {
-            // พยายามหา ID
-            const idMatch = str.match(/[-\w]{25,}/);
-            if (idMatch) {
-                return `https://drive.google.com/uc?export=view&id=${idMatch[0]}`;
-            }
+    // กรณีเป็น URL Google Drive
+    if (str.includes("drive.google.com") || str.includes("drive.google.com/open")) {
+        // พยายามหา ID (String ยาวๆ 25+ ตัวอักษร)
+        const idMatch = str.match(/[-\w]{25,}/);
+        if (idMatch) {
+            // ใช้ Endpoint thumbnail?id=...&sz=w1000 เพื่อความเสถียรในการแสดงผล (w1000 คือความกว้าง 1000px)
+            return `https://drive.google.com/thumbnail?id=${idMatch[0]}&sz=w1000`;
         }
-        return str;
     }
 
     // กรณีเป็น Base64 (ไม่มี Header) ยาวๆ
-    if (str.length > 100 && !str.startsWith("data:image")) {
+    if (str.length > 100 && !str.startsWith("data:image") && !str.startsWith("http")) {
         return `data:image/jpeg;base64,${str}`;
     }
 
     // กรณีเป็น Base64 มี Header แล้ว
     if (str.startsWith("data:image")) {
+        return str;
+    }
+
+    // กรณีเป็น URL อื่นๆ
+    if (str.startsWith("http")) {
         return str;
     }
 

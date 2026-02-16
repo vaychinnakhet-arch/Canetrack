@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CaneTicket } from '../types';
-import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, Coins, PlusCircle, Calculator } from 'lucide-react';
+import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, Coins, PlusCircle, Calculator, ImageOff } from 'lucide-react';
 
 interface RecordListProps {
   records: CaneTicket[];
@@ -122,6 +122,7 @@ const DateGroup: React.FC<{ date: string; records: CaneTicket[]; onDelete: (id: 
 const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void; onEdit: (t: CaneTicket) => void; isLast: boolean }> = ({ record, onDelete, onEdit, isLast }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const hasMoisture = record.moisture !== undefined && record.moisture > 0;
 
@@ -232,13 +233,23 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
             {record.imageUrl && (
               <div className="col-span-2 mt-2">
                  <span className="text-xs text-gray-400 block mb-1">รูปภาพต้นฉบับ (กดเพื่อดูภาพใหญ่)</span>
-                 <img 
-                   src={record.imageUrl} 
-                   alt="Original Slip" 
-                   referrerPolicy="no-referrer"
-                   onClick={() => setShowImageModal(true)}
-                   className="rounded-lg max-h-48 object-contain bg-white border border-gray-200 w-full cursor-zoom-in hover:opacity-95 transition-opacity" 
-                 />
+                 {!imageError ? (
+                    <img 
+                        src={record.imageUrl} 
+                        alt="Original Slip" 
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        onClick={() => setShowImageModal(true)}
+                        onError={() => setImageError(true)}
+                        className="rounded-lg max-h-48 object-contain bg-white border border-gray-200 w-full cursor-zoom-in hover:opacity-95 transition-opacity" 
+                    />
+                 ) : (
+                    <div className="w-full h-24 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-gray-400 border border-gray-200 border-dashed">
+                        <ImageOff size={24} className="mb-1" />
+                        <span className="text-[10px]">ไม่สามารถโหลดรูปภาพได้</span>
+                        <span className="text-[10px] text-gray-300">(ตรวจสอบสิทธิ์ไฟล์ Google Drive)</span>
+                    </div>
+                 )}
               </div>
             )}
             
@@ -262,7 +273,7 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
     </div>
 
     {/* Full Screen Image Modal */}
-    {showImageModal && record.imageUrl && (
+    {showImageModal && record.imageUrl && !imageError && (
         <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4" onClick={() => setShowImageModal(false)}>
             <div className="relative max-w-full max-h-full">
                 <button 
@@ -271,7 +282,12 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
                 >
                     <X size={24} />
                 </button>
-                <img src={record.imageUrl} referrerPolicy="no-referrer" className="max-w-full max-h-[90vh] object-contain rounded" />
+                <img 
+                    src={record.imageUrl} 
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous" 
+                    className="max-w-full max-h-[90vh] object-contain rounded" 
+                />
             </div>
         </div>
     )}

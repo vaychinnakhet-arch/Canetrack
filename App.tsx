@@ -12,6 +12,57 @@ import { syncToGoogleSheets, fetchFromGoogleSheets, deleteFromGoogleSheets } fro
 const COLORS_PROGRESS = ['#10B981', '#E5E7EB']; // Green, Gray
 const COLORS_SUCCESS = ['#FBBF24', '#FBBF24']; // Gold
 
+// --- Helper: Standardize Date to d/m/yyyy (Thai BE) ---
+const standardizeDate = (input: string): string => {
+  if (!input) return "";
+  const str = input.trim();
+  
+  // 1. Check for Thai Month Names (e.g. 14 กุมภาพันธ์ 2566)
+  const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  for (let i = 0; i < thaiMonths.length; i++) {
+    if (str.includes(thaiMonths[i])) {
+        const parts = str.split(' ');
+        // Expected parts: ["14", "กุมภาพันธ์", "2566"]
+        // Filter out empty strings from multiple spaces
+        const cleanParts = parts.filter(p => p.length > 0);
+        
+        if (cleanParts.length >= 3) {
+            const day = parseInt(cleanParts[0]);
+            const yearStr = cleanParts[cleanParts.length - 1];
+            const year = parseInt(yearStr);
+            if (!isNaN(day) && !isNaN(year)) {
+                return `${day}/${i + 1}/${year}`;
+            }
+        }
+    }
+  }
+
+  // 2. Check for ISO Date (YYYY-MM-DD) -> Convert to BE
+  if (str.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() + 543}`;
+      }
+  }
+
+  // 3. Check for slashes (d/m/y or d/m/Y)
+  if (str.includes('/')) {
+      const parts = str.split('/');
+      if (parts.length === 3) {
+        const d = parseInt(parts[0]);
+        const m = parseInt(parts[1]);
+        let y = parseInt(parts[2]);
+        
+        // If year is AD (e.g. 2023), convert to BE
+        if (y < 2400) y += 543;
+        
+        return `${d}/${m}/${y}`;
+      }
+  }
+
+  return str;
+};
+
 // --- Price Table Logic ---
 const calculateCanePrice = (moisture: number): number => {
     if (moisture <= 20.00) return 900;
@@ -140,7 +191,13 @@ const App: React.FC = () => {
                 setQuota(prev => ({ ...prev, targetTons: latestRecord.goalTarget! }));
             }
             
-            setRecords(cloudRecords); 
+            // Standardize dates from cloud just in case
+            const standardizedRecords = cloudRecords.map(r => ({
+                ...r,
+                date: standardizeDate(r.date)
+            }));
+
+            setRecords(standardizedRecords); 
             if (!silent) alert(`ดึงข้อมูลล่าสุดสำเร็จ ${cloudRecords.length} รายการ`);
         } else {
             if (!silent) alert("เชื่อมต่อสำเร็จ (ตารางยังว่างอยู่)");
@@ -157,6 +214,7 @@ const App: React.FC = () => {
   const handleSaveRecord = async (ticketData: CaneTicket) => {
     const newTicket: CaneTicket = {
       ...ticketData,
+      date: standardizeDate(ticketData.date), // ✅ Auto format date
       goalTarget: quota.targetTons,
       goalRound: currentRound
     };
@@ -183,14 +241,20 @@ const App: React.FC = () => {
   };
 
   const handleUpdateRecord = async (updatedTicket: CaneTicket) => {
+    // ✅ Auto format date before saving
+    const finalTicket = {
+        ...updatedTicket,
+        date: standardizeDate(updatedTicket.date)
+    };
+
     // Update local state
-    setRecords(prev => prev.map(r => r.id === updatedTicket.id ? updatedTicket : r));
+    setRecords(prev => prev.map(r => r.id === finalTicket.id ? finalTicket : r));
     setEditingRecord(null);
 
     // Sync Update to Cloud
     setIsSyncing(true);
     try {
-        await syncToGoogleSheets(updatedTicket, true); // true = update action
+        await syncToGoogleSheets(finalTicket, true); // true = update action
         console.log("Updated Google Sheets successfully");
     } catch (e) {
         console.error("Update failed", e);

@@ -59,7 +59,24 @@ export const EditModal: React.FC<EditModalProps> = ({ ticket, onSave, onClose, p
                  <div className="text-3xl font-bold text-gray-800">
                     {formData.netWeightKg.toLocaleString()} <span className="text-lg text-gray-500 font-normal">กก.</span>
                  </div>
-                 <div className="text-xs text-gray-400">({(formData.netWeightKg/1000).toFixed(2)} ตัน)</div>
+                 
+                 {/* Visible Date/Time Inputs for quick fix */}
+                 <div className="flex justify-center gap-2 mt-2">
+                    <input 
+                      type="text" 
+                      value={formData.date} 
+                      onChange={e => handleTextChange('date', e.target.value)} 
+                      className="w-28 text-center bg-gray-50 border border-gray-200 rounded text-xs py-1 text-gray-600 focus:border-blue-500 focus:bg-white transition-colors"
+                      placeholder="วว/ดด/ปปปป"
+                    />
+                    <input 
+                      type="text" 
+                      value={formData.time} 
+                      onChange={e => handleTextChange('time', e.target.value)} 
+                      className="w-20 text-center bg-gray-50 border border-gray-200 rounded text-xs py-1 text-gray-600 focus:border-blue-500 focus:bg-white transition-colors"
+                      placeholder="HH:mm"
+                    />
+                 </div>
             </div>
 
             {/* Moisture Input Section (Focus Area) */}
@@ -98,10 +115,10 @@ export const EditModal: React.FC<EditModalProps> = ({ ticket, onSave, onClose, p
 
             <button 
                 onClick={() => onSave(formData)}
-                disabled={!formData.moisture}
-                className={`w-full font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${!formData.moisture ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'}`}
+                className={`w-full font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 ${!formData.moisture ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' : 'bg-green-600 hover:bg-green-700 text-white'}`}
             >
-                <Save size={20} /> บันทึกและคำนวณเงิน
+                <Save size={20} /> 
+                {formData.moisture ? 'บันทึกและคำนวณเงิน' : 'บันทึกข้อมูล (ไม่มีความชื้น)'}
             </button>
 
             {/* Other Details (Hidden by default) */}
@@ -110,7 +127,7 @@ export const EditModal: React.FC<EditModalProps> = ({ ticket, onSave, onClose, p
                     onClick={() => setShowOtherDetails(!showOtherDetails)}
                     className="w-full flex items-center justify-center gap-2 text-sm text-gray-400 hover:text-gray-600 py-2"
                 >
-                    {showOtherDetails ? 'ซ่อนข้อมูลอื่น' : 'แก้ไขข้อมูลอื่นๆ (ทะเบียนรถ, วันที่)'}
+                    {showOtherDetails ? 'ซ่อนข้อมูลอื่น' : 'แก้ไขข้อมูลอื่นๆ (ทะเบียนรถ, เลขใบชั่ง)'}
                     {showOtherDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
 
@@ -126,14 +143,6 @@ export const EditModal: React.FC<EditModalProps> = ({ ticket, onSave, onClose, p
                         <div>
                             <label className="text-xs text-gray-500">ทะเบียนรถ</label>
                             <input type="text" value={formData.licensePlate} onChange={e => handleTextChange('licensePlate', e.target.value)} className="w-full p-2 border rounded mt-1 text-sm" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-500">วันที่</label>
-                            <input type="text" value={formData.date} onChange={e => handleTextChange('date', e.target.value)} className="w-full p-2 border rounded mt-1 text-sm" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-500">เวลา</label>
-                            <input type="text" value={formData.time} onChange={e => handleTextChange('time', e.target.value)} className="w-full p-2 border rounded mt-1 text-sm" />
                         </div>
                         <div>
                             <label className="text-xs text-gray-500">น้ำหนักสุทธิ (กก.)</label>

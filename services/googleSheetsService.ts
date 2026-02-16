@@ -41,6 +41,39 @@ const formatSheetTime = (timeVal: any): string => {
   return str;
 };
 
+// ฟังก์ชันแปลง URL Google Drive ให้เป็น Direct Link
+const normalizeImageUrl = (urlOrBase64: any): string | undefined => {
+    if (!urlOrBase64) return undefined;
+    const str = String(urlOrBase64).trim();
+    
+    if (str.length < 5) return undefined;
+
+    // กรณีเป็น URL
+    if (str.startsWith("http")) {
+        // ถ้าเป็น Google Drive Link แบบ View ให้แปลงเป็น Export
+        if (str.includes("drive.google.com") && !str.includes("export=view")) {
+            // พยายามหา ID
+            const idMatch = str.match(/[-\w]{25,}/);
+            if (idMatch) {
+                return `https://drive.google.com/uc?export=view&id=${idMatch[0]}`;
+            }
+        }
+        return str;
+    }
+
+    // กรณีเป็น Base64 (ไม่มี Header) ยาวๆ
+    if (str.length > 100 && !str.startsWith("data:image")) {
+        return `data:image/jpeg;base64,${str}`;
+    }
+
+    // กรณีเป็น Base64 มี Header แล้ว
+    if (str.startsWith("data:image")) {
+        return str;
+    }
+
+    return undefined;
+};
+
 export const syncToGoogleSheets = async (ticket: CaneTicket, isUpdate: boolean = false): Promise<boolean> => {
   if (!FIXED_SCRIPT_URL || FIXED_SCRIPT_URL.includes("PASTE_YOUR_SCRIPT_URL_HERE")) {
     console.warn("Invalid Script URL");
@@ -149,11 +182,11 @@ export const fetchFromGoogleSheets = async (): Promise<CaneTicket[] | null> => {
       productName: item.productName || "อ้อย",
       goalTarget: Number(item.goalTarget) || 0,
       goalRound: Number(item.goalRound) || 1,
-      // Map new fields
       moisture: item.moisture ? Number(item.moisture) : undefined,
       canePrice: item.canePrice ? Number(item.canePrice) : undefined,
       totalValue: item.totalValue ? Number(item.totalValue) : undefined,
-      imageUrl: item.imageUrl && item.imageUrl.startsWith("http") ? item.imageUrl : undefined,
+      // ใช้ฟังก์ชัน normalize ช่วยแปลง URL
+      imageUrl: normalizeImageUrl(item.imageUrl),
       timestamp: item.timestamp ? new Date(item.timestamp).getTime() : Date.now()
     }));
   } catch (error) {

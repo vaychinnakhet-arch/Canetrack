@@ -1,69 +1,55 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Camera, LayoutDashboard, Settings, Plus, Leaf, Target, Truck, Calendar, Trophy, ArrowUpCircle, History, ChevronRight, Download, FileSpreadsheet, Cloud, Link as LinkIcon, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Camera, Settings, Plus, Leaf, Target, Truck, Trophy, ArrowUpCircle, History, Download, FileSpreadsheet, Cloud, CheckCircle2, RefreshCw } from 'lucide-react';
 import { CaneTicket, QuotaSettings, AppView, GoalHistory } from './types';
 import { Scanner } from './components/Scanner';
 import { RecordList } from './components/RecordList';
 import { SummaryCard } from './components/SummaryCard';
-import { syncToGoogleSheets, fetchFromGoogleSheets } from './services/googleSheetsService';
+import { syncToGoogleSheets, fetchFromGoogleSheets, deleteFromGoogleSheets } from './services/googleSheetsService';
 
 // Color Palette
 const COLORS_PROGRESS = ['#10B981', '#E5E7EB']; // Green, Gray
 const COLORS_SUCCESS = ['#FBBF24', '#FBBF24']; // Gold
 
-// Default Google Apps Script URL provided by user
-const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbym2WrMT6N-BVAoCTyN9aIK1hcGlQBcL5FsiSKwTWq90VwFX0yaG5AnicmQamvK2vo/exec";
-
 const App: React.FC = () => {
-  // State
+  // State with Lazy Initialization
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
-  const [records, setRecords] = useState<CaneTicket[]>([]);
-  // Initialize with new structure, provide fallback for existing data
-  const [quota, setQuota] = useState<QuotaSettings>({ 
-    targetTons: 1000, 
-    currentGoalStartDate: 0, 
-    history: [],
-    googleScriptUrl: DEFAULT_SCRIPT_URL
+  
+  const [records, setRecords] = useState<CaneTicket[]>(() => {
+    const saved = localStorage.getItem('caneRecords');
+    return saved ? JSON.parse(saved) : [];
   });
+
+  const [quota, setQuota] = useState<QuotaSettings>(() => {
+    const saved = localStorage.getItem('caneQuota');
+    const defaultSettings = { 
+        targetTons: 1000, 
+        currentGoalStartDate: 0, 
+        history: []
+    };
+
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            return { ...defaultSettings, ...parsed };
+        } catch (e) {
+            console.error("Error parsing saved quota settings", e);
+            return defaultSettings;
+        }
+    }
+    return defaultSettings;
+  });
+
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [showNextGoalModal, setShowNextGoalModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  // Load data on mount
+  // Auto-fetch on mount (ALWAYS try to fetch now)
   useEffect(() => {
-    const savedRecords = localStorage.getItem('caneRecords');
-    const savedQuota = localStorage.getItem('caneQuota');
-    
-    let currentScriptUrl = DEFAULT_SCRIPT_URL;
-
-    if (savedQuota) {
-      const parsedQuota = JSON.parse(savedQuota);
-      // Migration: If url is missing or empty, use the default provided by user
-      currentScriptUrl = (parsedQuota.googleScriptUrl && parsedQuota.googleScriptUrl.trim() !== "") 
-        ? parsedQuota.googleScriptUrl 
-        : DEFAULT_SCRIPT_URL;
-
-      setQuota({
-        targetTons: parsedQuota.targetTons || 1000,
-        currentGoalStartDate: parsedQuota.currentGoalStartDate || 0,
-        history: parsedQuota.history || [],
-        googleScriptUrl: currentScriptUrl
-      });
-    } else {
-      // New user setup
-      setQuota(prev => ({ ...prev, googleScriptUrl: DEFAULT_SCRIPT_URL }));
-    }
-
-    if (savedRecords) {
-      setRecords(JSON.parse(savedRecords));
-    }
-
-    // Auto-fetch latest data from Google Sheets on startup
-    if (currentScriptUrl) {
-      handleFetchData(currentScriptUrl, true); // true = silent mode (no alert on error)
-    }
-  }, []);
+    handleFetchData(true);
+  }, []); 
 
   // Save data on change
   useEffect(() => {
@@ -75,8 +61,6 @@ const App: React.FC = () => {
   }, [quota]);
 
   // --- Calculations ---
-
-  // 1. Current Goal Progress (Only records after start date)
   const currentGoalRecords = useMemo(() => 
     records.filter(r => r.timestamp >= quota.currentGoalStartDate), 
   [records, quota.currentGoalStartDate]);
@@ -87,11 +71,11 @@ const App: React.FC = () => {
 
   const currentGoalWeightTons = currentGoalWeightKg / 1000;
   
-  // 2. Lifetime Stats
+  // Lifetime Stats
   const lifetimeWeightKg = useMemo(() => records.reduce((sum, r) => sum + r.netWeightKg, 0), [records]);
   const lifetimeWeightTons = lifetimeWeightKg / 1000;
 
-  // 3. Percentages & Status
+  // Percentages & Status
   const percentage = Math.min(100, Math.max(0, (currentGoalWeightTons / quota.targetTons) * 100));
   const remainingTons = Math.max(0, quota.targetTons - currentGoalWeightTons);
   const isGoalAchieved = currentGoalWeightTons >= quota.targetTons;
@@ -104,81 +88,101 @@ const App: React.FC = () => {
 
   // --- Handlers ---
 
-  const handleFetchData = async (url: string, silent: boolean = false) => {
+  const handleFetchData = async (silent: boolean = false) => {
     setIsLoading(true);
+    setConnectionStatus('idle');
     try {
-      const cloudRecords = await fetchFromGoogleSheets(url);
+      const cloudRecords = await fetchFromGoogleSheets();
       
       if (cloudRecords === null) {
-          // Error case
+          setConnectionStatus('error');
           if (!silent) {
-            alert("⚠️ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้\n\nสาเหตุที่เป็นไปได้:\n1. ยังไม่ได้ตั้งสิทธิ์ 'Anyone' (ทุกคน) ตอน Deploy\n2. Script Error: หากสร้าง Script แบบ Standalone (ไม่ได้สร้างผ่าน Google Sheet) คำสั่ง getActiveSpreadsheet() จะใช้ไม่ได้\n3. URL ไม่ถูกต้อง");
+            alert("⚠️ ไม่พบ URL ของ Google Script\n\nกรุณาแก้ไขไฟล์ 'services/googleSheetsService.ts' และใส่ URL ที่ได้จากการ Deploy");
           }
-      } else if (cloudRecords.length > 0) {
-        // Success case with data
-        setRecords(cloudRecords);
-        console.log(`Loaded ${cloudRecords.length} records from cloud`);
-        if (!silent) alert(`ดึงข้อมูลสำเร็จ ${cloudRecords.length} รายการ`);
       } else {
-        // Success case but empty
-        console.log("Connect success, but no records found.");
-        if (!silent) alert("เชื่อมต่อสำเร็จ แต่ยังไม่มีข้อมูลในตาราง");
+        setConnectionStatus('success');
+        if (cloudRecords.length > 0) {
+            setRecords(cloudRecords); 
+            if (!silent) alert(`ดึงข้อมูลล่าสุดสำเร็จ ${cloudRecords.length} รายการ`);
+        } else {
+            if (!silent) alert("เชื่อมต่อสำเร็จ (ตารางยังว่างอยู่)");
+        }
       }
     } catch (e) {
       console.error("Failed to fetch data", e);
+      setConnectionStatus('error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSaveRecord = async (newTicket: CaneTicket) => {
-    // 1. Save locally first (Instant UI update)
+  const handleSaveRecord = async (ticketData: CaneTicket) => {
+    // Inject current quota info into the ticket before saving
+    const newTicket: CaneTicket = {
+      ...ticketData,
+      goalTarget: quota.targetTons,
+      goalRound: currentRound
+    };
+
+    // 1. Save locally first
     setRecords(prev => [...prev, newTicket]);
     setView(AppView.DASHBOARD);
 
-    // 2. Sync to Google Sheets if URL is present
-    const scriptUrl = quota.googleScriptUrl || DEFAULT_SCRIPT_URL;
-    
-    if (scriptUrl) {
-      setIsSyncing(true);
-      // Use setTimeout to not block the UI render
-      setTimeout(async () => {
+    // 2. Sync to Google Sheets
+    setIsSyncing(true);
+    setTimeout(async () => {
         try {
-          const success = await syncToGoogleSheets(scriptUrl, newTicket);
+          const success = await syncToGoogleSheets(newTicket);
           if (success) {
             console.log("Synced to Google Sheets successfully");
-            // Optional: Re-fetch to confirm consistency if needed, but might be slow
+            setConnectionStatus('success');
           } else {
-            console.warn("Sync completed with potential issues");
+            setConnectionStatus('error');
           }
         } catch (e) {
-          console.error("Sync failed", e);
-          // Optional: Add a subtle notification
+          setConnectionStatus('error');
         } finally {
           setIsSyncing(false);
         }
-      }, 500);
+    }, 500);
+  };
+
+  const handleDeleteRecord = async (id: string) => {
+    // หา record ที่จะลบเพื่อเอาข้อมูลมาโชว์
+    const recordToDelete = records.find(r => r.id === id);
+    if (!recordToDelete) return;
+
+    // ✅ ย้ายการยืนยันมาไว้ที่นี่ เพื่อความชัวร์
+    const confirmed = window.confirm(`ต้องการลบรายการนี้ใช่หรือไม่?\n\nวันที่: ${recordToDelete.date}\nเลขที่ใบชั่ง: ${recordToDelete.ticketNumber}`);
+    if (!confirmed) return;
+
+    // 1. ลบจากหน้าจอทันทีเพื่อให้รู้ว่าทำงานแล้ว
+    setRecords(prev => prev.filter(r => r.id !== id));
+
+    // 2. ส่งคำสั่งลบไปที่ Google Sheets (แบบเงียบๆ)
+    if (recordToDelete.ticketNumber && recordToDelete.ticketNumber !== "-" && recordToDelete.ticketNumber.trim() !== "") {
+        setIsSyncing(true);
+        try {
+            await deleteFromGoogleSheets(recordToDelete.ticketNumber);
+            console.log("Deleted from Google Sheets:", recordToDelete.ticketNumber);
+        } catch(e) {
+            console.error("Failed to delete from sheet", e);
+            alert("ลบข้อมูลจาก Google Sheets ไม่สำเร็จ ข้อมูลอาจกลับมาเมื่อรีเฟรช");
+        } finally {
+            setIsSyncing(false);
+        }
+    } else {
+        // ถ้ารายการไม่มีเลขที่ใบชั่ง หรือเป็นแค่แบบร่าง
+        console.log("No ticket number to delete from cloud");
     }
   };
 
-  const handleDeleteRecord = (id: string) => {
-    setRecords(prev => prev.filter(r => r.id !== id));
-    // Note: This only deletes locally. Deleting from Google Sheets requires more complex API logic.
-    alert("ลบข้อมูลออกจากเครื่องแล้ว (ข้อมูลใน Google Sheets จะยังคงอยู่)");
-  };
-
-  const updateCurrentQuota = (newTarget: number, newScriptUrl: string) => {
+  const updateCurrentQuota = (newTarget: number) => {
     setQuota(prev => ({ 
       ...prev, 
-      targetTons: newTarget,
-      googleScriptUrl: newScriptUrl
+      targetTons: newTarget
     }));
     setShowQuotaModal(false);
-    
-    // If URL changed, try to fetch data
-    if (newScriptUrl && newScriptUrl !== quota.googleScriptUrl) {
-      handleFetchData(newScriptUrl);
-    }
   };
 
   const handleStartNextGoal = (newTarget: number) => {
@@ -194,7 +198,7 @@ const App: React.FC = () => {
       ...prev,
       targetTons: newTarget,
       currentGoalStartDate: Date.now(),
-      history: [completedGoal, ...prev.history] // Add to history (newest first)
+      history: [completedGoal, ...prev.history]
     }));
     
     setShowNextGoalModal(false);
@@ -205,43 +209,16 @@ const App: React.FC = () => {
       alert("ไม่มีข้อมูลให้ส่งออก");
       return;
     }
-
-    // Define Headers
-    const headers = [
-      "วันที่",
-      "เวลา",
-      "เลขที่ใบชั่ง",
-      "ทะเบียนรถ",
-      "ลูกค้า/ชาวไร่",
-      "สินค้า",
-      "น้ำหนักสุทธิ (กก.)",
-      "น้ำหนักรวม (กก.)",
-      "น้ำหนักรถ (กก.)"
-    ];
-
-    // Map Data
+    const headers = ["วันที่", "เวลา", "เลขที่ใบชั่ง", "ทะเบียนรถ", "ลูกค้า/ชาวไร่", "สินค้า", "น้ำหนักสุทธิ (กก.)", "เป้าหมาย (ตัน)", "รอบที่"];
     const rows = records.map(r => [
-      r.date,
-      r.time,
-      `"${r.ticketNumber}"`, // Quote to prevent auto-formatting
-      `"${r.licensePlate}"`,
-      `"${r.vendorName}"`,
-      r.productName,
-      r.netWeightKg,
-      r.grossWeightKg || 0,
-      r.tareWeightKg || 0
+      r.date, r.time, `"${r.ticketNumber}"`, `"${r.licensePlate}"`, `"${r.vendorName}"`, r.productName, r.netWeightKg, r.goalTarget || 0, r.goalRound || 1
     ]);
-
-    // Create CSV Content with BOM for Thai support in Excel
-    const csvContent = "\uFEFF" + 
-      [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-
-    // Create Download Link
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `cane_tracking_export_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `cane_tracking_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -252,10 +229,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (view === AppView.SCANNER) {
       return (
-        <Scanner 
-          onSave={handleSaveRecord} 
-          onCancel={() => setView(AppView.DASHBOARD)} 
-        />
+        <Scanner onSave={handleSaveRecord} onCancel={() => setView(AppView.DASHBOARD)} />
       );
     }
 
@@ -267,20 +241,23 @@ const App: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
               <Leaf className="text-green-600 fill-green-600" />
               <span>CaneTrack AI</span>
-              {isSyncing && <span className="text-xs text-blue-500 animate-pulse font-normal">(กำลังส่ง...)</span>}
+              {isSyncing && <span className="text-xs text-blue-500 animate-pulse font-normal">(กำลังซิงค์ข้อมูล...)</span>}
             </h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 flex items-center gap-2">
               รวมทั้งหมด: {lifetimeWeightTons.toLocaleString()} ตัน
-              {isLoading && <span className="ml-2 inline-block animate-spin text-green-600">⌛</span>}
+              {isLoading ? <span className="animate-spin text-green-600">⌛</span> : 
+               connectionStatus === 'error' ? <span className="text-red-400 text-xs">⚠️ Offline</span> : 
+               <span className="text-green-500 text-xs">● Online</span>
+              }
             </p>
           </div>
           <div className="flex gap-2">
             <button 
-              onClick={() => handleFetchData(quota.googleScriptUrl || DEFAULT_SCRIPT_URL)}
-              className={`p-2 rounded-full ${isLoading ? 'animate-spin bg-green-50 text-green-600' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+              onClick={() => handleFetchData()}
+              className={`p-2 rounded-full transition-colors ${isLoading ? 'bg-green-50 text-green-600' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
               title="รีเฟรชข้อมูลจาก Cloud"
             >
-              <RefreshCw size={20} />
+              <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
             </button>
             <button 
               onClick={() => setShowQuotaModal(true)}
@@ -403,7 +380,7 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* Recent Records (All time) */}
+        {/* Recent Records - Now Grouped */}
         <div>
           <div className="flex justify-between items-end mb-4">
             <h2 className="text-lg font-bold text-gray-800">รายการล่าสุด</h2>
@@ -421,7 +398,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       {renderContent()}
 
-      {/* Floating Action Button for Scan */}
+      {/* Floating Action Button */}
       {view === AppView.DASHBOARD && (
         <div className="fixed bottom-6 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <button 
@@ -433,7 +410,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Settings / Quota Modal */}
+      {/* Settings Modal (Simplified: No URL input) */}
       {showQuotaModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl max-h-[90vh] overflow-y-auto">
@@ -442,7 +419,7 @@ const App: React.FC = () => {
               <span>การตั้งค่า</span>
             </h3>
 
-            {/* Quota Section */}
+            {/* Quota Only */}
             <div className="mb-6">
                 <label className="block text-sm text-gray-600 mb-2 font-medium">เป้าหมายปัจจุบัน (ตัน)</label>
                 <input 
@@ -452,28 +429,20 @@ const App: React.FC = () => {
                   id="quotaInput"
                 />
 
-                <label className="block text-sm text-gray-600 mb-2 font-medium flex items-center gap-2">
-                  <Cloud size={16} />
-                  <span>Google Apps Script URL</span>
-                </label>
-                <p className="text-xs text-gray-400 mb-2">ใส่ Web App URL เพื่อซิงค์ข้อมูลลง Google Sheets</p>
-                <div className="flex items-center gap-2 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                  <LinkIcon size={16} className="text-gray-400 min-w-[16px]" />
-                  <input 
-                    type="text" 
-                    defaultValue={quota.googleScriptUrl || DEFAULT_SCRIPT_URL}
-                    placeholder="https://script.google.com/macros/s/..."
-                    className="w-full bg-transparent outline-none text-sm text-gray-600"
-                    id="scriptUrlInput"
-                  />
-                  {quota.googleScriptUrl && <CheckCircle2 size={16} className="text-green-500" />}
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
+                   <div className="flex items-center gap-2 text-blue-700 mb-1">
+                      <Cloud size={16} />
+                      <span className="text-xs font-bold">สถานะ: Online Mode</span>
+                   </div>
+                   <p className="text-[10px] text-blue-600">
+                     ระบบกำลังเชื่อมต่อกับ Google Sheet ที่ฝังค่าไว้ หากต้องการแก้ไข ให้แก้ที่ไฟล์ services/googleSheetsService.ts
+                   </p>
                 </div>
 
                 <button 
                     onClick={() => {
-                    const val = document.getElementById('quotaInput') as HTMLInputElement;
-                    const urlVal = document.getElementById('scriptUrlInput') as HTMLInputElement;
-                    updateCurrentQuota(Number(val.value), urlVal.value);
+                        const val = document.getElementById('quotaInput') as HTMLInputElement;
+                        updateCurrentQuota(Number(val.value));
                     }}
                     className="w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-sm hover:bg-green-700"
                 >
@@ -483,28 +452,17 @@ const App: React.FC = () => {
 
             <hr className="border-gray-100 my-4" />
 
-            {/* Data Management Section */}
             <div className="mb-6">
-                <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                    <FileSpreadsheet size={16} className="text-green-600" />
-                    จัดการข้อมูล
-                </h4>
-                <p className="text-xs text-gray-500 mb-3">
-                    ส่งออกข้อมูลทั้งหมดเป็นไฟล์ CSV เพื่อนำไปเปิดใน Excel หรือ Google Sheets
-                </p>
                 <button 
                     onClick={handleExportCSV}
                     className="w-full bg-white border border-green-200 text-green-700 hover:bg-green-50 font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
                 >
                     <Download size={18} />
-                    <span>ส่งออกข้อมูล (Excel/CSV)</span>
+                    <span>ส่งออกข้อมูล (CSV)</span>
                 </button>
             </div>
             
-            <button 
-              onClick={() => setShowQuotaModal(false)}
-              className="w-full py-3 text-gray-400 font-medium hover:bg-gray-100 rounded-xl"
-            >
+            <button onClick={() => setShowQuotaModal(false)} className="w-full py-3 text-gray-400 font-medium hover:bg-gray-100 rounded-xl">
               ปิดหน้าต่าง
             </button>
           </div>
@@ -516,40 +474,30 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-amber-400 to-orange-500"></div>
-            
             <div className="text-center mb-6">
                 <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Trophy className="text-amber-500" size={32} />
                 </div>
                 <h3 className="text-xl font-bold text-gray-800">ยินดีด้วย!</h3>
                 <p className="text-sm text-gray-500">คุณทำสำเร็จตามเป้าหมายที่ {currentRound} แล้ว</p>
-                <div className="mt-2 text-2xl font-bold text-amber-600">{currentGoalWeightTons.toLocaleString()} ตัน</div>
             </div>
-
             <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-2 text-center">ตั้งเป้าหมายสำหรับรอบใหม่ (ตัน)</label>
+                <label className="block text-sm font-bold text-gray-700 mb-2 text-center">ตั้งเป้าหมายรอบใหม่ (ตัน)</label>
                 <input 
                 type="number" 
                 defaultValue={1000}
                 className="w-full bg-white border border-gray-300 rounded-lg p-3 text-2xl mb-2 focus:ring-2 focus:ring-amber-500 outline-none text-center font-bold text-gray-800"
                 id="nextGoalInput"
                 />
-                <p className="text-xs text-gray-400 text-center">ระบบจะเริ่มนับความคืบหน้าใหม่สำหรับรอบนี้</p>
             </div>
-
             <div className="flex gap-3">
-              <button 
-                onClick={() => setShowNextGoalModal(false)}
-                className="flex-1 py-3 text-gray-500 font-medium hover:bg-gray-100 rounded-xl"
-              >
-                ไว้ทีหลัง
-              </button>
+              <button onClick={() => setShowNextGoalModal(false)} className="flex-1 py-3 text-gray-500 font-medium hover:bg-gray-100 rounded-xl">ไว้ทีหลัง</button>
               <button 
                 onClick={() => {
                   const val = document.getElementById('nextGoalInput') as HTMLInputElement;
                   handleStartNextGoal(Number(val.value));
                 }}
-                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl hover:shadow-lg hover:scale-[1.02] transition-all"
+                className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl"
               >
                 เริ่มเป้าหมายใหม่
               </button>

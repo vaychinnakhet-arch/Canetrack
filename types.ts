@@ -11,6 +11,9 @@ export interface CaneTicket {
   productName: string;
   imageUrl?: string;
   timestamp: number;
+  // New fields for tracking quota history per ticket
+  goalTarget?: number;
+  goalRound?: number;
 }
 
 export interface GoalHistory {
@@ -25,7 +28,6 @@ export interface QuotaSettings {
   targetTons: number;
   currentGoalStartDate: number;
   history: GoalHistory[];
-  googleScriptUrl?: string; // New field for Google Apps Script URL
 }
 
 export enum AppView {

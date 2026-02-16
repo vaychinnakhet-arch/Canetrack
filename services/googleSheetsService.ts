@@ -1,13 +1,65 @@
 import { CaneTicket } from '../types';
 
-export const syncToGoogleSheets = async (scriptUrl: string, ticket: CaneTicket): Promise<boolean> => {
-  if (!scriptUrl) return false;
+// ==========================================
+// 🔴 ฝัง URL ของคุณตรงนี้แล้ว 🔴
+const FIXED_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbym2WrMT6N-BVAoCTyN9aIK1hcGlQBcL5FsiSKwTWq90VwFX0yaG5AnicmQamvK2vo/exec"; 
+// ==========================================
 
-  const cleanBase64 = ticket.imageUrl 
-    ? ticket.imageUrl.replace(/^data:image\/(png|jpg|jpeg|webp);base64,/, "") 
-    : "";
+// ฟังก์ชันแปลงวันที่จาก ISO String ยาวๆ ให้เป็นรูปแบบสั้น (วว/ดด/ปปปป)
+const formatSheetDate = (dateVal: any): string => {
+  if (!dateVal) return "";
+  const str = String(dateVal);
+  if (str.includes('T') || str.match(/^\d{4}-\d{2}-\d{2}/)) {
+      try {
+          const d = new Date(str);
+          if (isNaN(d.getTime())) return str;
+          
+          let year = d.getFullYear();
+          const displayYear = year < 2400 ? year + 543 : year;
+          
+          return `${d.getDate()}/${d.getMonth() + 1}/${displayYear}`;
+      } catch (e) {
+          return str;
+      }
+  }
+  return str;
+};
+
+// ฟังก์ชันแปลงเวลาจาก ISO String ให้เป็น HH:mm
+const formatSheetTime = (timeVal: any): string => {
+  if (!timeVal) return "";
+  const str = String(timeVal);
+  if (str.includes('T')) {
+      try {
+          const d = new Date(str);
+          if (isNaN(d.getTime())) return str;
+          return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
+      } catch {
+          return str;
+      }
+  }
+  return str;
+};
+
+export const syncToGoogleSheets = async (ticket: CaneTicket): Promise<boolean> => {
+  if (!FIXED_SCRIPT_URL || FIXED_SCRIPT_URL.includes("PASTE_YOUR_SCRIPT_URL_HERE")) {
+    console.warn("Invalid Script URL");
+    return false;
+  }
+
+  // ✅ เตรียมข้อมูลรูปภาพ (ไม่มีการย่อขนาดตามคำขอ)
+  let finalImageBase64 = "";
+  if (ticket.imageUrl && ticket.imageUrl.startsWith("data:image")) {
+      try {
+          // ส่งไฟล์ Original เลย (ตัดแค่ header)
+          finalImageBase64 = ticket.imageUrl.replace(/^data:image\/(png|jpg|jpeg|webp);base64,/, "");
+      } catch (e) {
+          console.error("Image processing failed:", e);
+      }
+  }
 
   const payload = {
+    id: ticket.id,
     ticketNumber: ticket.ticketNumber,
     date: ticket.date,
     time: ticket.time,
@@ -17,18 +69,16 @@ export const syncToGoogleSheets = async (scriptUrl: string, ticket: CaneTicket):
     licensePlate: ticket.licensePlate,
     vendorName: ticket.vendorName,
     productName: ticket.productName,
-    imageBase64: cleanBase64
+    goalTarget: ticket.goalTarget || 0,
+    goalRound: ticket.goalRound || 1,
+    imageBase64: finalImageBase64 
   };
 
   try {
-    // Use 'no-cors' to ensure the request is sent even if the browser blocks the redirect response.
-    // Content-Type must be text/plain to satisfy 'no-cors' constraints or simple request checks.
-    await fetch(scriptUrl, {
+    await fetch(FIXED_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'text/plain', 
-      },
+      mode: 'no-cors', 
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload),
     });
 
@@ -39,44 +89,65 @@ export const syncToGoogleSheets = async (scriptUrl: string, ticket: CaneTicket):
   }
 };
 
-export const fetchFromGoogleSheets = async (scriptUrl: string): Promise<CaneTicket[] | null> => {
-  if (!scriptUrl) return null;
+export const deleteFromGoogleSheets = async (ticketNumber: string): Promise<boolean> => {
+  if (!FIXED_SCRIPT_URL) return false;
+
+  const payload = {
+    action: 'delete',
+    ticketNumber: ticketNumber.trim() // ✅ เพิ่ม trim() เพื่อตัดช่องว่างป้องกันหาไม่เจอ
+  };
 
   try {
-    // Append timestamp to prevent caching
-    const separator = scriptUrl.includes('?') ? '&' : '?';
-    const url = `${scriptUrl}${separator}t=${Date.now()}`;
+    await fetch(FIXED_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+    });
+    return true;
+  } catch (error) {
+    console.error("Error deleting from Google Sheets:", error);
+    return false;
+  }
+};
 
-    // Simplified GET request. 
-    // We removed 'credentials: omit' and explicit redirect options to rely on standard browser defaults,
-    // which is often the most compatible way to handle GAS Web App redirects for public scripts.
-    const response = await fetch(url);
+export const fetchFromGoogleSheets = async (): Promise<CaneTicket[] | null> => {
+  if (!FIXED_SCRIPT_URL || FIXED_SCRIPT_URL.includes("PASTE_YOUR_SCRIPT_URL_HERE")) {
+    console.error("URL not configured");
+    return null;
+  }
 
+  try {
+    const url = `${FIXED_SCRIPT_URL}?action=read&t=${Date.now()}`;
+    
+    const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow'
+    });
+    
     if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
+        throw new Error(`Network response was not ok: ${response.status}`);
     }
 
     const data = await response.json();
     
-    if (!Array.isArray(data)) {
-        console.error("Data received is not an array:", data);
-        return [];
-    }
+    if (!Array.isArray(data)) return [];
 
-    // Map data
     return data.map((item: any, index: number) => ({
-      id: `sheet-${index}-${item.timestamp}`,
-      ticketNumber: item.ticketNumber,
-      date: item.date,
-      time: item.time,
-      netWeightKg: Number(item.netWeightKg) || 0,
-      grossWeightKg: Number(item.grossWeightKg) || 0,
-      tareWeightKg: Number(item.tareWeightKg) || 0,
-      licensePlate: item.licensePlate,
-      vendorName: item.vendorName,
-      productName: item.productName,
-      imageUrl: item.imageUrl,
-      timestamp: item.timestamp || Date.now()
+      id: item.id || `sheet-${index}-${Date.now()}`,
+      ticketNumber: item.ticketNumber?.toString() || "-",
+      date: formatSheetDate(item.date),
+      time: formatSheetTime(item.time),
+      netWeightKg: Number(String(item.netWeightKg).replace(/,/g, '')) || 0,
+      grossWeightKg: Number(String(item.grossWeightKg).replace(/,/g, '')) || 0,
+      tareWeightKg: Number(String(item.tareWeightKg).replace(/,/g, '')) || 0,
+      licensePlate: item.licensePlate || "-",
+      vendorName: item.vendorName || "-",
+      productName: item.productName || "อ้อย",
+      goalTarget: Number(item.goalTarget) || 0,
+      goalRound: Number(item.goalRound) || 1,
+      imageUrl: item.imageUrl && item.imageUrl.startsWith("http") ? item.imageUrl : undefined,
+      timestamp: item.timestamp ? new Date(item.timestamp).getTime() : Date.now()
     }));
   } catch (error) {
     console.error("Error fetching from Google Sheets:", error);

@@ -1,0 +1,7 @@
+{
+  "name": "CaneTrack AI",
+  "description": "Smart sugarcane delivery tracker with AI-powered slip scanning and quota management.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

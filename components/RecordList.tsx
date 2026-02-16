@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { CaneTicket } from '../types';
-import { ChevronDown, ChevronUp, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, Coins, PlusCircle, Calculator, ImageOff, ExternalLink, ChevronRight, Folder } from 'lucide-react';
+import { ChevronDown, ChevronRight, Truck, FileText, Trash2, Calendar, Edit, X, Droplets, PlusCircle, Calculator, ImageOff, ExternalLink, Folder, Layers } from 'lucide-react';
 
 interface RecordListProps {
   records: CaneTicket[];
@@ -47,6 +47,23 @@ const getMonthYearKey = (dateStr: string) => {
     return `${thaiMonths[d.getMonth()]} ${d.getFullYear() + 543}`;
 };
 
+// Helper for Thai Week Label
+const getWeekLabel = (mondayTs: number) => {
+    const monday = new Date(mondayTs);
+    const sunday = new Date(mondayTs);
+    sunday.setDate(monday.getDate() + 6);
+    
+    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    
+    const d1 = monday.getDate();
+    const m1 = thaiMonths[monday.getMonth()];
+    const d2 = sunday.getDate();
+    const m2 = thaiMonths[sunday.getMonth()];
+    
+    if (m1 === m2) return `${d1} - ${d2} ${m1}`;
+    return `${d1} ${m1} - ${d2} ${m2}`;
+};
+
 export const RecordList: React.FC<RecordListProps> = ({ records, onDelete, onEdit }) => {
   // 1. Group by Month Year
   const groupedByMonth = useMemo(() => {
@@ -61,7 +78,6 @@ export const RecordList: React.FC<RecordListProps> = ({ records, onDelete, onEdi
 
   // Sort Months (Newest First)
   const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => {
-      // Hacky sort based on Thai month string, but since we usually view recent data, let's try to parse one record from each group
       const recA = groupedByMonth[a][0];
       const recB = groupedByMonth[b][0];
       return parseDateScore(recB.date) - parseDateScore(recA.date);
@@ -87,7 +103,7 @@ export const RecordList: React.FC<RecordListProps> = ({ records, onDelete, onEdi
             records={groupedByMonth[month]} 
             onDelete={onDelete} 
             onEdit={onEdit}
-            defaultExpanded={index === 0} // Expand only the first month by default
+            defaultExpanded={index === 0} 
         />
       ))}
     </div>
@@ -107,16 +123,33 @@ const MonthGroup: React.FC<{
     const totalWeight = records.reduce((sum, r) => sum + r.netWeightKg, 0) / 1000;
     const totalMoney = records.reduce((sum, r) => sum + (r.totalValue || 0), 0);
 
-    // Group records inside month by Date
-    const groupedByDate = records.reduce((groups, record) => {
-        const dateKey = record.date || "ไม่ระบุวันที่";
-        if (!groups[dateKey]) groups[dateKey] = [];
-        groups[dateKey].push(record);
+    // 2. Group records inside month by Week (Monday Start)
+    const groupedByWeek = useMemo(() => {
+        const groups: Record<number, CaneTicket[]> = {};
+        records.forEach(r => {
+            const ts = parseDateScore(r.date);
+            if (ts === 0) {
+                // Fallback for unknown date
+                const k = 0;
+                if (!groups[k]) groups[k] = [];
+                groups[k].push(r);
+                return;
+            }
+            const d = new Date(ts);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+            const monday = new Date(d);
+            monday.setDate(diff);
+            monday.setHours(0,0,0,0);
+            
+            const key = monday.getTime();
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(r);
+        });
         return groups;
-    }, {} as Record<string, CaneTicket[]>);
+    }, [records]);
 
-    // Sort dates (Newest First within month)
-    const sortedDates = Object.keys(groupedByDate).sort((a, b) => parseDateScore(b) - parseDateScore(a));
+    const sortedWeekKeys = Object.keys(groupedByWeek).sort((a,b) => Number(b) - Number(a));
 
     return (
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
@@ -146,9 +179,72 @@ const MonthGroup: React.FC<{
                 </div>
             </div>
 
-            {/* Content (List of Date Groups) */}
+            {/* Content (List of Week Groups) */}
             {isExpanded && (
-                <div className="p-2 space-y-2 bg-gray-50/30">
+                <div className="p-3 space-y-6 bg-gray-50/30">
+                     {sortedWeekKeys.map(key => (
+                         <WeekGroup 
+                            key={key} 
+                            weekStartTs={Number(key)} 
+                            records={groupedByWeek[Number(key)]} 
+                            onDelete={onDelete} 
+                            onEdit={onEdit} 
+                        />
+                     ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const WeekGroup: React.FC<{
+    weekStartTs: number;
+    records: CaneTicket[];
+    onDelete: (id: string) => void; 
+    onEdit: (t: CaneTicket) => void;
+}> = ({ weekStartTs, records, onDelete, onEdit }) => {
+    const [isExpanded, setIsExpanded] = useState(true);
+    
+    // Group records by Date
+    const groupedByDate = records.reduce((groups, record) => {
+        const dateKey = record.date || "ไม่ระบุวันที่";
+        if (!groups[dateKey]) groups[dateKey] = [];
+        groups[dateKey].push(record);
+        return groups;
+    }, {} as Record<string, CaneTicket[]>);
+
+    // Sort dates (Newest First within week)
+    const sortedDates = Object.keys(groupedByDate).sort((a, b) => parseDateScore(b) - parseDateScore(a));
+
+    const totalWeight = records.reduce((sum, r) => sum + r.netWeightKg, 0) / 1000;
+    const label = weekStartTs === 0 ? "ไม่ระบุช่วงเวลา" : getWeekLabel(weekStartTs);
+
+    return (
+        <div className="mb-4 last:mb-0">
+            {/* Week Header - Clickable */}
+            <div 
+                className="flex items-center gap-2 mb-2 px-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded-lg transition-colors select-none group"
+                onClick={() => setIsExpanded(!isExpanded)}
+            >
+               {/* Chevron with rotation animation */}
+               <div className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
+                    <ChevronRight size={16} />
+               </div>
+
+               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2 group-hover:text-gray-700">
+                   สัปดาห์ {label}
+               </span>
+               
+               <div className="h-px bg-gray-200 flex-1 border-b border-dashed border-gray-200 mx-2"></div>
+               
+               <span className="text-[10px] text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-100 shadow-sm whitespace-nowrap group-hover:border-gray-300 group-hover:text-gray-600">
+                  รวม {totalWeight.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ตัน
+               </span>
+            </div>
+
+            {/* List of DateGroups - Collapsible Content */}
+            {isExpanded && (
+                <div className="space-y-2 pl-3 border-l-2 border-gray-100 ml-3.5 animate-fade-in">
                      {sortedDates.map(date => (
                          <DateGroup 
                             key={date} 
@@ -162,10 +258,10 @@ const MonthGroup: React.FC<{
             )}
         </div>
     );
-};
+}
 
 const DateGroup: React.FC<{ date: string; records: CaneTicket[]; onDelete: (id: string) => void; onEdit: (t: CaneTicket) => void }> = ({ date, records, onDelete, onEdit }) => {
-  const [isExpanded, setIsExpanded] = useState(false); // Default collapsed inside month
+  const [isExpanded, setIsExpanded] = useState(false); // Default collapsed inside week
   const totalWeight = records.reduce((sum, r) => sum + r.netWeightKg, 0);
   const totalWeightTons = totalWeight / 1000;
   
@@ -173,7 +269,7 @@ const DateGroup: React.FC<{ date: string; records: CaneTicket[]; onDelete: (id: 
   const sortedRecords = [...records].sort((a, b) => b.timestamp - a.timestamp);
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden transition-all duration-200">
+    <div className="bg-white border border-gray-100 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-sm">
       <div 
         className="px-4 py-3 flex justify-between items-center cursor-pointer select-none active:bg-gray-50 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -241,7 +337,6 @@ const RecordItem: React.FC<{ record: CaneTicket; onDelete: (id: string) => void;
                 ) : (
                     <span className="text-gray-300 text-[10px] mb-1">-</span>
                 )}
-                {/* Visual indicator for expanded state */}
              </div>
         </div>
       </div>

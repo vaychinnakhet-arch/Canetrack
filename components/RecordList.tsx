@@ -203,7 +203,7 @@ const WeekGroup: React.FC<{
     onDelete: (id: string) => void; 
     onEdit: (t: CaneTicket) => void;
 }> = ({ weekStartTs, records, onDelete, onEdit }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [isExpanded, setIsExpanded] = useState(false); // Changed default to false
     
     // Group records by Date
     const groupedByDate = records.reduce((groups, record) => {

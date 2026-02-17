@@ -7,6 +7,20 @@ export default defineConfig(({ mode }) => {
   // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, (process as any).cwd(), '');
 
+  // --- DEBUG LOGGING ---
+  if (!env.API_KEY) {
+      console.warn("\n\n⚠️  -------------------------------------------------------");
+      console.warn("⚠️  WARNING: API_KEY not found in .env file!");
+      console.warn("⚠️  Please create a .env file in the root directory.");
+      console.warn("⚠️  Content should be: API_KEY=AIzaSy...");
+      console.warn("⚠️  -------------------------------------------------------\n\n");
+  } else {
+      console.log("\n\n✅ -------------------------------------------------------");
+      console.log(`✅ SUCCESS: API_KEY loaded! (Starts with: ${env.API_KEY.substring(0, 5)}...)`);
+      console.log("✅ -------------------------------------------------------\n\n");
+  }
+  // ---------------------
+
   return {
     plugins: [react()],
     define: {

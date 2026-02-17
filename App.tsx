@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins, AlertTriangle } from 'lucide-react';
+import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins, AlertTriangle, TrendingUp } from 'lucide-react';
 import { CaneTicket, QuotaSettings, AppView, GoalHistory } from './types';
 import { Scanner } from './components/Scanner';
 import { RecordList } from './components/RecordList';
 import { SummaryCard } from './components/SummaryCard';
 import { EditModal } from './components/EditModal';
+import { AnalysisView } from './components/AnalysisView'; // Import new view
 import { syncToGoogleSheets, fetchFromGoogleSheets, deleteFromGoogleSheets } from './services/googleSheetsService';
 
 // Color Palette
@@ -130,7 +131,8 @@ const App: React.FC = () => {
   // Check API Key on mount
   useEffect(() => {
     const key = process.env.API_KEY;
-    if (!key || key.includes("YOUR_API_KEY") || key === "") {
+    // Check for empty, default 'undefined' string, or placeholder text from .env.example
+    if (!key || key === "undefined" || key === "" || key.includes("YOUR_API_KEY") || key.includes("YOUR_GOOGLE_GEMINI_API_KEY")) {
         setApiKeyMissing(true);
     }
   }, []);
@@ -351,12 +353,25 @@ const App: React.FC = () => {
                 <AlertTriangle size={48} className="text-red-500 mb-4" />
                 <h2 className="text-xl font-bold text-gray-800">ไม่สามารถใช้งานสแกนเนอร์ได้</h2>
                 <p className="text-gray-500 mt-2">กรุณาตั้งค่า API Key ในไฟล์ .env และ Restart Server ใหม่</p>
+                <div className="mt-4 p-4 bg-gray-100 rounded text-xs text-left text-gray-600">
+                    <p className="font-bold mb-1">วิธีแก้บน Vercel:</p>
+                    1. ไปที่ Settings {'>'} Environment Variables<br/>
+                    2. เพิ่ม Key: <code>API_KEY</code><br/>
+                    3. ใส่ Value: รหัส AI ของคุณ<br/>
+                    4. กด Save และ Redeploy
+                </div>
                 <button onClick={() => setView(AppView.DASHBOARD)} className="mt-6 px-4 py-2 bg-gray-200 rounded-lg">กลับหน้าหลัก</button>
             </div>
           )
       }
       return (
         <Scanner onSave={handleSaveRecord} onCancel={() => setView(AppView.DASHBOARD)} />
+      );
+    }
+
+    if (view === AppView.ANALYSIS) {
+      return (
+        <AnalysisView records={records} onBack={() => setView(AppView.DASHBOARD)} />
       );
     }
 
@@ -474,7 +489,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-2 gap-3">
           <SummaryCard 
             title="มูลค่ารวม (รอบนี้)" 
-            value={`฿${currentGoalTotalMoney.toLocaleString()}`}
+            value={`${currentGoalTotalMoney.toLocaleString()} บาท`}
             icon={Coins}
             color="amber"
           />
@@ -485,6 +500,17 @@ const App: React.FC = () => {
             color="green"
           />
         </div>
+
+        {/* Analysis Button (New Row) */}
+        <button 
+             onClick={() => setView(AppView.ANALYSIS)}
+             className="w-full bg-white p-3 rounded-xl shadow-sm border border-purple-100 flex items-center justify-center gap-3 text-purple-700 hover:bg-purple-50 transition-colors"
+           >
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <TrendingUp size={20} />
+              </div>
+              <span className="font-bold text-sm">วิเคราะห์แนวโน้ม (Forecast)</span>
+        </button>
 
         {/* Recent Records */}
         <div>
@@ -508,9 +534,12 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       {/* API Key Warning Banner */}
       {apiKeyMissing && (
-        <div className="bg-red-500 text-white px-4 py-3 text-center text-sm font-bold flex items-center justify-center gap-2 animate-pulse sticky top-0 z-50">
-           <AlertTriangle size={18} />
-           <span>⚠️ ไม่พบ API Key! กรุณาตรวจสอบไฟล์ .env แล้ว Restart Server (npm run dev)</span>
+        <div className="bg-red-500 text-white px-4 py-3 text-center text-sm font-bold flex flex-col md:flex-row items-center justify-center gap-2 animate-pulse sticky top-0 z-50">
+           <div className="flex items-center gap-2">
+              <AlertTriangle size={18} />
+              <span>⚠️ ไม่พบ API Key! (หรือใช้ Key ปลอม)</span>
+           </div>
+           <span className="text-xs font-normal opacity-90 md:ml-2">กรุณาตั้งค่า 'API_KEY' บน Vercel Settings แล้ว Redeploy</span>
         </div>
       )}
 

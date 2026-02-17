@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, Check, X, Loader2, Save } from 'lucide-react';
+import { Camera, Upload, Check, X, Loader2, Save, AlertTriangle } from 'lucide-react';
 import { analyzeTicketImage } from '../services/geminiService';
 import { CaneTicket } from '../types';
 
@@ -35,12 +35,25 @@ export const Scanner: React.FC<ScannerProps> = ({ onSave, onCancel }) => {
     } catch (error: any) {
       console.error("Analysis Error:", error);
       
-      // Check for specific API Key missing error
+      let errorMessage = "ไม่สามารถอ่านข้อมูลได้ กรุณาลองใหม่อีกครั้ง หรือกรอกข้อมูลเอง";
+      let errorDetail = "";
+
+      // Check specific error messages
       if (error.message === "API Key is missing") {
-        alert("⚠️ ไม่พบ API Key\n\nกรุณาตั้งค่า 'API_KEY' ใน Environment Variables ของคุณก่อนใช้งาน");
-      } else {
-        alert("ไม่สามารถอ่านข้อมูลได้ กรุณาลองใหม่อีกครั้ง หรือกรอกข้อมูลเอง");
+         errorMessage = "⚠️ ไม่พบ API Key บน Server!";
+         errorDetail = "กรุณาไปที่ Vercel > Settings > Environment Variables แล้วเพิ่ม 'API_KEY'";
+      } else if (error.message?.includes("400") || error.message?.includes("API key not valid")) {
+         errorMessage = "⚠️ API Key ไม่ถูกต้อง (Invalid Key)";
+         errorDetail = "กรุณาตรวจสอบว่า Copy Key มาครบถ้วนหรือไม่";
+      } else if (error.message?.includes("429") || error.message?.includes("Quota")) {
+         errorMessage = "⚠️ ใช้งานเกินโควต้า (Quota Exceeded)";
+         errorDetail = "API Key นี้ใช้งานเกินลิมิตฟรีของ Google แล้ว";
+      } else if (error.message) {
+         // Show the actual error for debugging
+         errorMessage = `เกิดข้อผิดพลาดจาก AI: ${error.message}`;
       }
+
+      alert(`${errorMessage}\n\n${errorDetail}`);
 
       // Fallback to empty form
       setAnalyzedData({
@@ -207,7 +220,6 @@ export const Scanner: React.FC<ScannerProps> = ({ onSave, onCancel }) => {
                 <button 
                   onClick={() => {
                     // Toggle showing advanced fields or just always show them in form
-                    // For now, keeping it simple as per request "Show only main items" in list, but edit needs details
                   }}
                   className="text-xs text-gray-400 underline"
                 >

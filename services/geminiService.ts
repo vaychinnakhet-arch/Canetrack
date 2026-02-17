@@ -8,6 +8,10 @@ const getAiClient = () => {
     console.error("API Key is missing. Please check your .env file or environment configuration.");
     throw new Error("API Key is missing");
   }
+  
+  // Debug log (masked) to confirm key is loaded
+  console.log("Gemini AI Initialized. Key ends with:", apiKey.slice(-4));
+  
   return new GoogleGenAI({ apiKey });
 };
 

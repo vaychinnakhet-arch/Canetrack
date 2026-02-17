@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins } from 'lucide-react';
+import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins, AlertTriangle } from 'lucide-react';
 import { CaneTicket, QuotaSettings, AppView, GoalHistory } from './types';
 import { Scanner } from './components/Scanner';
 import { RecordList } from './components/RecordList';
@@ -93,6 +93,7 @@ const calculateCanePrice = (moisture: number): number => {
 const App: React.FC = () => {
   // State with Lazy Initialization
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
+  const [apiKeyMissing, setApiKeyMissing] = useState(false);
   
   const [records, setRecords] = useState<CaneTicket[]>(() => {
     const saved = localStorage.getItem('caneRecords');
@@ -125,6 +126,14 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  // Check API Key on mount
+  useEffect(() => {
+    const key = process.env.API_KEY;
+    if (!key || key.includes("YOUR_API_KEY") || key === "") {
+        setApiKeyMissing(true);
+    }
+  }, []);
 
   // Auto-fetch on mount
   useEffect(() => {
@@ -336,6 +345,16 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (view === AppView.SCANNER) {
+      if (apiKeyMissing) {
+          return (
+            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                <AlertTriangle size={48} className="text-red-500 mb-4" />
+                <h2 className="text-xl font-bold text-gray-800">ไม่สามารถใช้งานสแกนเนอร์ได้</h2>
+                <p className="text-gray-500 mt-2">กรุณาตั้งค่า API Key ในไฟล์ .env และ Restart Server ใหม่</p>
+                <button onClick={() => setView(AppView.DASHBOARD)} className="mt-6 px-4 py-2 bg-gray-200 rounded-lg">กลับหน้าหลัก</button>
+            </div>
+          )
+      }
       return (
         <Scanner onSave={handleSaveRecord} onCancel={() => setView(AppView.DASHBOARD)} />
       );
@@ -487,13 +506,22 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+      {/* API Key Warning Banner */}
+      {apiKeyMissing && (
+        <div className="bg-red-500 text-white px-4 py-3 text-center text-sm font-bold flex items-center justify-center gap-2 animate-pulse sticky top-0 z-50">
+           <AlertTriangle size={18} />
+           <span>⚠️ ไม่พบ API Key! กรุณาตรวจสอบไฟล์ .env แล้ว Restart Server (npm run dev)</span>
+        </div>
+      )}
+
       {renderContent()}
 
       {view === AppView.DASHBOARD && (
         <div className="fixed bottom-6 left-0 right-0 flex justify-center z-20 pointer-events-none">
           <button 
             onClick={() => setView(AppView.SCANNER)}
-            className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-full shadow-lg shadow-green-300 transform transition-transform active:scale-95 flex items-center justify-center pointer-events-auto"
+            className={`bg-green-600 hover:bg-green-700 text-white p-4 rounded-full shadow-lg shadow-green-300 transform transition-transform active:scale-95 flex items-center justify-center pointer-events-auto ${apiKeyMissing ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+            disabled={apiKeyMissing}
           >
             <Plus size={32} />
           </button>

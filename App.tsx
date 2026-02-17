@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Camera, Settings, Plus, Target, Trophy, ArrowUpCircle, Download, RefreshCw, Coins, AlertTriangle, TrendingUp, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { CaneTicket, QuotaSettings, AppView, GoalHistory } from './types';
 import { Scanner } from './components/Scanner';
 import { RecordList } from './components/RecordList';
 import { SummaryCard } from './components/SummaryCard';
 import { EditModal } from './components/EditModal';
-import { AnalysisView } from './components/AnalysisView'; // Import new view
+import { AnalysisView } from './components/AnalysisView';
+import { LuckyDaysView, LUCKY_EVENTS } from './components/LuckyDaysView'; // Import new view
 import { syncToGoogleSheets, fetchFromGoogleSheets, deleteFromGoogleSheets } from './services/googleSheetsService';
 
 // Color Palette
@@ -179,6 +180,30 @@ const App: React.FC = () => {
     { name: 'Achieved', value: currentGoalWeightTons },
     { name: 'Remaining', value: remainingTons },
   ];
+
+  // --- Lucky Days Logic (Next Event) ---
+  const nextLuckyEvent = useMemo(() => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const currentYear = today.getFullYear();
+
+    // Filter for future events
+    const upcomingEvents = LUCKY_EVENTS.map(event => {
+        const eventDate = new Date(currentYear, event.month - 1, event.day);
+        // Handle year boundary roughly (not critical for Feb-Apr specific requests)
+        return { ...event, eventDate };
+    }).filter(e => e.eventDate.getTime() >= today.getTime())
+    .sort((a,b) => a.eventDate.getTime() - b.eventDate.getTime());
+
+    if (upcomingEvents.length === 0) return null;
+
+    const next = upcomingEvents[0];
+    const diffTime = Math.abs(next.eventDate.getTime() - today.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    
+    return { ...next, diffDays };
+  }, []);
+
 
   // --- Handlers ---
 
@@ -375,6 +400,12 @@ const App: React.FC = () => {
       );
     }
 
+    if (view === AppView.LUCKY_CALENDAR) {
+      return (
+        <LuckyDaysView onBack={() => setView(AppView.DASHBOARD)} />
+      );
+    }
+
     return (
       <div className="p-4 space-y-6 pb-24 max-w-md mx-auto">
         {/* Header */}
@@ -412,6 +443,34 @@ const App: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Lucky Day Alert Banner */}
+        {nextLuckyEvent && (
+            <div 
+                onClick={() => setView(AppView.LUCKY_CALENDAR)}
+                className={`w-full p-4 rounded-xl border shadow-sm cursor-pointer transition-transform hover:scale-[1.02] active:scale-95 flex items-start gap-3 relative overflow-hidden ${nextLuckyEvent.type === 'good' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}
+            >
+                <div className={`p-2 rounded-full shrink-0 ${nextLuckyEvent.type === 'good' ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'}`}>
+                    {nextLuckyEvent.type === 'good' ? <CheckCircle size={24} /> : <XCircle size={24} />}
+                </div>
+                <div className="flex-1">
+                     <div className="flex justify-between items-start">
+                         <span className={`text-xs font-bold uppercase tracking-wider ${nextLuckyEvent.type === 'good' ? 'text-green-700' : 'text-red-700'}`}>
+                             {nextLuckyEvent.diffDays === 0 ? 'วันนี้!' : `อีก ${nextLuckyEvent.diffDays} วัน`}
+                         </span>
+                         <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                             <Clock size={10} /> {nextLuckyEvent.dateStr}
+                         </span>
+                     </div>
+                     <h3 className="font-bold text-gray-800 text-lg leading-tight mt-1">{nextLuckyEvent.dayLabel}</h3>
+                     <p className={`text-sm mt-1 line-clamp-1 ${nextLuckyEvent.type === 'good' ? 'text-green-800' : 'text-red-800'}`}>
+                         {nextLuckyEvent.action}
+                     </p>
+                </div>
+                {/* Decoration */}
+                <div className={`absolute -right-2 -bottom-2 w-16 h-16 rounded-full opacity-20 ${nextLuckyEvent.type === 'good' ? 'bg-green-400' : 'bg-red-400'}`}></div>
+            </div>
+        )}
 
         {/* Dashboard Card */}
         <div className={`rounded-2xl p-6 shadow-sm border relative overflow-hidden transition-all duration-500 ${isGoalAchieved ? 'bg-gradient-to-br from-yellow-50 to-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
@@ -501,16 +560,28 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* Analysis Button (New Row) */}
-        <button 
-             onClick={() => setView(AppView.ANALYSIS)}
-             className="w-full bg-white p-3 rounded-xl shadow-sm border border-purple-100 flex items-center justify-center gap-3 text-purple-700 hover:bg-purple-50 transition-colors"
-           >
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <TrendingUp size={20} />
-              </div>
-              <span className="font-bold text-sm">วิเคราะห์แนวโน้ม (Forecast)</span>
-        </button>
+        {/* Menu Buttons Row */}
+        <div className="grid grid-cols-2 gap-3">
+             <button 
+                onClick={() => setView(AppView.ANALYSIS)}
+                className="bg-white p-3 rounded-xl shadow-sm border border-purple-100 flex flex-col items-center justify-center gap-2 text-purple-700 hover:bg-purple-50 transition-colors"
+            >
+                <div className="p-2 bg-purple-100 rounded-lg">
+                    <TrendingUp size={20} />
+                </div>
+                <span className="font-bold text-xs">วิเคราะห์แนวโน้ม</span>
+            </button>
+
+            <button 
+                onClick={() => setView(AppView.LUCKY_CALENDAR)}
+                className="bg-white p-3 rounded-xl shadow-sm border border-pink-100 flex flex-col items-center justify-center gap-2 text-pink-700 hover:bg-pink-50 transition-colors"
+            >
+                <div className="p-2 bg-pink-100 rounded-lg">
+                    <Calendar size={20} />
+                </div>
+                <span className="font-bold text-xs">วันดี/วันเสีย</span>
+            </button>
+        </div>
 
         {/* Recent Records */}
         <div>

@@ -32,8 +32,16 @@ export const Scanner: React.FC<ScannerProps> = ({ onSave, onCancel }) => {
     try {
       const result = await analyzeTicketImage(base64Img);
       setAnalyzedData(result);
-    } catch (error) {
-      alert("ไม่สามารถอ่านข้อมูลได้ กรุณาลองใหม่อีกครั้ง หรือกรอกข้อมูลเอง");
+    } catch (error: any) {
+      console.error("Analysis Error:", error);
+      
+      // Check for specific API Key missing error
+      if (error.message === "API Key is missing") {
+        alert("⚠️ ไม่พบ API Key\n\nกรุณาตั้งค่า 'API_KEY' ใน Environment Variables ของคุณก่อนใช้งาน");
+      } else {
+        alert("ไม่สามารถอ่านข้อมูลได้ กรุณาลองใหม่อีกครั้ง หรือกรอกข้อมูลเอง");
+      }
+
       // Fallback to empty form
       setAnalyzedData({
         netWeightKg: 0,

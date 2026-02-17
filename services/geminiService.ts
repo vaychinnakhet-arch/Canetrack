@@ -1,8 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 const getAiClient = () => {
-  const apiKey = "AIzaSyCyckP_GULyrrtzB7WWpla4yKdLxFJVliQ";
+  // ⚠️ SECURITY UPDATE: Always use environment variables, never hardcode API keys.
+  const apiKey = process.env.API_KEY;
+  
   if (!apiKey) {
+    console.error("API Key is missing. Please check your .env file or environment configuration.");
     throw new Error("API Key is missing");
   }
   return new GoogleGenAI({ apiKey });

@@ -232,7 +232,7 @@ export const AnalysisView: React.FC<AnalysisViewProps> = ({ records, onBack }) =
                 </div>
                 <div className="text-sm text-gray-500 mb-1">คาดการณ์รายได้รวม</div>
                 <div className="text-2xl font-bold text-amber-600">
-                    {(forecast.finalIncome / 1000).toFixed(1)} <span className="text-sm font-normal text-gray-400">หมื่น</span>
+                    {forecast.finalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})} <span className="text-sm font-normal text-gray-400">บาท</span>
                 </div>
                 <div className="mt-2 text-xs text-amber-600 flex items-center gap-1 bg-amber-50 w-fit px-2 py-1 rounded-full">
                     <TrendingUp size={12} />
